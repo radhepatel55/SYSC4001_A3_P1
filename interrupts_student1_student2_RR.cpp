@@ -1,7 +1,7 @@
 /**
  * @file interrupts.cpp
- * @author Sasisekhar Govind
- * @brief template main.cpp file for Assignment 3 Part 1 of SYSC4001
+ * @author Radhe Patel & Avnita Ala
+ * @brief main.cpp file for Assignment 3 Part 1 of SYSC4001
  * 
  */
 
@@ -17,7 +17,19 @@ void FCFS(std::vector<PCB> &ready_queue) {
             );
 }
 
-std::tuple<std::string /* add std::string for bonus mark */ > run_simulation(std::vector<PCB> list_processes) {
+void logMemoryStatus(std::ostream& os) {
+    os << "Memory Partition Status:\n";
+    os << "Partition Number | Size | Occupied By (PID)\n";
+    os << "-------------------------------------------\n";
+    for (const auto& partition : memory_paritions) {
+        os << std::setw(16) << partition.partition_number << " | "
+           << std::setw(4) << partition.size << " | "
+           << std::setw(16) << (partition.occupied == -1 ? "Free" : std::to_string(partition.occupied)) << "\n";
+    }
+    os << "-------------------------------------------\n\n";
+}
+
+std::tuple<std::string, std::string> run_simulation(std::vector<PCB> list_processes) {
 
     std::vector<PCB> ready_queue;   //The ready queue of processes
     std::vector<PCB> wait_queue;    //The wait queue of processes
@@ -33,6 +45,8 @@ std::tuple<std::string /* add std::string for bonus mark */ > run_simulation(std
     idle_CPU(running);
 
     std::string execution_status;
+    std::ostringstream memorystream;
+    unsigned int quantum = 100; // 100 ms time slice
 
     //make the output table (the header row)
     execution_status = print_exec_header();
@@ -43,39 +57,69 @@ std::tuple<std::string /* add std::string for bonus mark */ > run_simulation(std
 
         //Inside this loop, there are three things you must do:
         // 1) Populate the ready queue with processes as they arrive
-        // 2) Manage the wait queue
-        // 3) Schedule processes from the ready queue
-
-        //Population of ready queue is given to you as an example.
-        //Go through the list of proceeses
         for(auto &process : list_processes) {
-            if(process.arrival_time == current_time) {//check if the AT = current time
-                //if so, assign memory and put the process into the ready queue
-                assign_memory(process);
-
-                process.state = READY;  //Set the process state to READY
-                ready_queue.push_back(process); //Add the process to the ready queue
-                job_list.push_back(process); //Add it to the list of processes
-
-                execution_status += print_exec_status(current_time, process.PID, NEW, READY);
+            if(process.arrival_time == current_time) {
+                if (assign_memory(process)){
+                    process.state = READY;
+                    ready_queue.push_back(process);
+                    job_list.push_back(process);
+                    execution_status += print_exec_status(current_time, process.PID, NEW, READY);
+                    logMemoryStatus(memorystream);
+                }
             }
         }
+        // 2) Manage the wait queue
 
         ///////////////////////MANAGE WAIT QUEUE/////////////////////////
         //This mainly involves keeping track of how long a process must remain in the ready queue
-
+        // not required because there is no I/O in Round Robin Scheduling
         /////////////////////////////////////////////////////////////////
 
+        // 3) Schedule processes from the ready queue
         //////////////////////////SCHEDULER//////////////////////////////
-        FCFS(ready_queue); //example of FCFS is shown here
-        /////////////////////////////////////////////////////////////////
+        if (!ready_queue.empty()) {
+            PCB& current = ready_queue.front();
+            current.state = RUNNING;
+            execution_status += print_exec_status(current_time, current.PID, READY, RUNNING);
 
+            // Run up to quantum (100), or until process completion
+            unsigned int run_time = std::min(current.remaining_time, quantum);
+            current.remaining_time -= run_time;
+            current_time += run_time;
+
+            if (current.remaining_time == 0) {
+                current.state = TERMINATED;
+                execution_status += print_exec_status(current_time, current.PID, RUNNING, TERMINATED);
+                free_memory(current);
+                logMemoryStatus(memorystream);
+                
+                for (auto &p : job_list) {
+                    if (p.PID == current.PID) {
+                        p.state = TERMINATED;
+                        break;
+                    }
+                }
+
+                ready_queue.erase(ready_queue.begin());
+            } 
+            
+            else {
+                current.state = READY;
+                execution_status += print_exec_status(current_time, current.PID, RUNNING, READY);
+                PCB next_process = current;
+                ready_queue.erase(ready_queue.begin());
+                ready_queue.push_back(next_process);
+            }
+        } else {
+            current_time++;
+        }
     }
+    /////////////////////////////////////////////////////////////////
     
     //Close the output table
     execution_status += print_exec_footer();
 
-    return std::make_tuple(execution_status);
+    return std::make_tuple(execution_status, memorystream.str());
 }
 
 
@@ -111,9 +155,10 @@ int main(int argc, char** argv) {
     input_file.close();
 
     //With the list of processes, run the simulation
-    auto [exec] = run_simulation(list_process);
+    auto [exec, memorystatus] = run_simulation(list_process);
 
     write_output(exec, "execution.txt");
+    write_output(memorystatus, "memorylog.txt");
 
     return 0;
 }
