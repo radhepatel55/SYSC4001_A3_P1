@@ -315,4 +315,26 @@ void idle_CPU(PCB &running) {
     running.PID = -1;
 }
 
+
+
+
+
+
+void ExternalPriority(std::vector<PCB>& ready_queue) {
+    std::sort(ready_queue.begin(), ready_queue.end(), [](const PCB& a, const PCB& b) {
+        return a.PID < b.PID;
+    });
+}
+
+void logMemoryStatus(std::ostream& os) {
+    os << "Memory Partition Status:\n";
+    os << "Partition Number | Size | Occupied By (PID)\n";
+    os << "-------------------------------------------\n";
+    for (const auto& partition : memory_paritions) {
+        os << std::setw(16) << partition.partition_number << " | "
+           << std::setw(4) << partition.size << " | "
+           << std::setw(16) << (partition.occupied == -1 ? "Free" : std::to_string(partition.occupied)) << "\n";
+    }
+    os << "-------------------------------------------\n\n";
+}
 #endif

@@ -1,0 +1,34 @@
++------------------------------------------------+
+|Time of Transition |PID | Old State | New State |
++------------------------------------------------+
+|                 0 |  5 |       NEW |     READY |
+|                 0 |  5 |     READY |   RUNNING |
+|                40 |  5 |   RUNNING |   WAITING |
+|                50 |  1 |       NEW |     READY |
+|                50 |  1 |     READY |   RUNNING |
+|                70 |  1 |   RUNNING |   WAITING |
+|                70 |  5 |   WAITING |     READY |
+|                70 |  5 |     READY |   RUNNING |
+|               110 |  5 |   RUNNING |   WAITING |
+|               110 |  1 |   WAITING |     READY |
+|               110 |  1 |     READY |   RUNNING |
+|               130 |  1 |   RUNNING |   WAITING |
+|               140 |  5 |   WAITING |     READY |
+|               140 |  1 |   WAITING |     READY |
+|               140 |  1 |     READY |   RUNNING |
+|               160 |  1 |   RUNNING |   WAITING |
+|               160 |  5 |     READY |   RUNNING |
+|               200 |  5 |   RUNNING |   WAITING |
+|               200 |  1 |   WAITING |     READY |
+|               200 |  1 |     READY |   RUNNING |
+|               220 |  1 |   RUNNING |   WAITING |
+|               230 |  5 |   WAITING |     READY |
+|               230 |  1 |   WAITING |     READY |
+|               230 |  1 |     READY |   RUNNING |
+|               240 |  1 |   RUNNING |TERMINATED |
+|               240 |  5 |     READY |   RUNNING |
+|               280 |  5 |   RUNNING |   WAITING |
+|               310 |  5 |   WAITING |     READY |
+|               310 |  5 |     READY |   RUNNING |
+|               330 |  5 |   RUNNING |TERMINATED |
++------------------------------------------------+

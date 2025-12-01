@@ -5,7 +5,7 @@
  * 
  */
 
-#include "interrupts_student1_student2.hpp"
+#include<interrupts_101262847_101301514.hpp>
 
 void FCFS(std::vector<PCB> &ready_queue) {
     std::sort( 
@@ -15,24 +15,6 @@ void FCFS(std::vector<PCB> &ready_queue) {
                     return (first.arrival_time > second.arrival_time); 
                 } 
             );
-}
-
-void ExternalPriority(std::vector<PCB>& ready_queue) {
-    std::sort(ready_queue.begin(), ready_queue.end(), [](const PCB& a, const PCB& b) {
-        return a.PID < b.PID;
-    });
-}
-
-void logMemoryStatus(std::ostream& os) {
-    os << "Memory Partition Status:\n";
-    os << "Partition Number | Size | Occupied By (PID)\n";
-    os << "-------------------------------------------\n";
-    for (const auto& partition : memory_paritions) {
-        os << std::setw(16) << partition.partition_number << " | "
-           << std::setw(4) << partition.size << " | "
-           << std::setw(16) << (partition.occupied == -1 ? "Free" : std::to_string(partition.occupied)) << "\n";
-    }
-    os << "-------------------------------------------\n\n";
 }
 
 std::tuple<std::string, std::string> run_simulation(std::vector<PCB> list_processes) {
@@ -52,16 +34,37 @@ std::tuple<std::string, std::string> run_simulation(std::vector<PCB> list_proces
 
     std::string execution_status;
     std::ostringstream memorystream;
-    unsigned int quantum = 100; // 100 ms time slice
+
+    int current_index = -1;
 
     //make the output table (the header row)
     execution_status = print_exec_header();
+
+    // Initialize I/O tracking
+    const int MAX_PID = 100;
+    unsigned int next_io_time[MAX_PID];
+    unsigned int io_done_time[MAX_PID];
+    bool has_io[MAX_PID];
+
+    for (int i = 0; i < MAX_PID; ++i) {
+        next_io_time[i] = 0;
+        io_done_time[i] = 0;
+        has_io[i] = false;
+    }
+
+    for (auto &p : list_processes) {
+        if (p.io_freq > 0 && p.PID < MAX_PID) {
+            next_io_time[p.PID] = p.io_freq;
+            has_io[p.PID] = true;
+        }
+    }
 
     //Loop while till there are no ready or waiting processes.
     //This is the main reason I have job_list, you don't have to use it.
     while(!all_process_terminated(job_list) || job_list.empty()) {
 
         //Inside this loop, there are three things you must do:
+
         // 1) Populate the ready queue with processes as they arrive
         for(auto &process : list_processes) {
             if(process.arrival_time == current_time) {
@@ -76,27 +79,57 @@ std::tuple<std::string, std::string> run_simulation(std::vector<PCB> list_proces
         }
 
         // 2) Manage the wait queue
-
         ///////////////////////MANAGE WAIT QUEUE/////////////////////////
         //This mainly involves keeping track of how long a process must remain in the ready queue
+        for (auto wait = wait_queue.begin(); wait != wait_queue.end(); ) {
+            PCB &p = *wait;
+            if (p.PID < MAX_PID && io_done_time[p.PID] <= current_time) {
+                states oldstate = p.state;
+                p.state = READY;
+                execution_status += print_exec_status(current_time, p.PID, oldstate, READY);
+                ready_queue.push_back(p);
+
+                // sync job_list
+                for (auto &j : job_list) {
+                    if (j.PID == p.PID) {
+                        j.state = READY;
+                        break;
+                    }
+                }
+                wait = wait_queue.erase(wait);
+            } else {
+                ++wait;
+            }
+        }
 
         /////////////////////////////////////////////////////////////////
 
-        // 3) Schedule processes from the ready queue
-
+        // 3) Schedule processes from the ready queue 
         //////////////////////////SCHEDULER//////////////////////////////
-        if (!ready_queue.empty()) {
-            // Sort by PID (priority)—highest priority is smallest PID
-            ExternalPriority(ready_queue);
-            PCB& current = ready_queue.front();
+        if (current_index == -1 && !ready_queue.empty()) {
+            ExternalPriority(ready_queue);      
+            current_index = 0;
+            PCB &current = ready_queue[current_index];
             current.state = RUNNING;
             execution_status += print_exec_status(current_time, current.PID, READY, RUNNING);
+        }
 
-            unsigned int run_time = std::min(current.remaining_time, quantum);
-            current.remaining_time -= run_time;
-            current_time += run_time;
+        if (current_index != -1) {
+            PCB &current = ready_queue[current_index];
 
-            if(current.remaining_time == 0) {
+            // Run for 1 time unit
+            current.remaining_time--;
+            if (has_io[current.PID]) {
+                unsigned int &nio = next_io_time[current.PID];
+                if (nio > 0) {
+                    nio--;               
+                }
+            }
+
+            current_time++;
+
+            // Check for completion
+            if (current.remaining_time == 0) {
                 current.state = TERMINATED;
                 execution_status += print_exec_status(current_time, current.PID, RUNNING, TERMINATED);
                 free_memory(current);
@@ -109,19 +142,38 @@ std::tuple<std::string, std::string> run_simulation(std::vector<PCB> list_proces
                     }
                 }
 
-                ready_queue.erase(ready_queue.begin());
-            } else {
-                current.state = READY;
-                execution_status += print_exec_status(current_time, current.PID, RUNNING, READY);
-                PCB next_process = current;
-                ready_queue.erase(ready_queue.begin());
-                ready_queue.push_back(next_process);
+                ready_queue.erase(ready_queue.begin() + current_index);
+                current_index = -1;
+            }
+
+            // Check for I/O start (only if still has CPU left)
+            else if (has_io[current.PID] && next_io_time[current.PID] == 0) {
+                states prev = current.state;
+                current.state = WAITING;
+                execution_status += print_exec_status(current_time, current.PID, prev, WAITING);
+
+                io_done_time[current.PID] = current_time + current.io_duration;
+                next_io_time[current.PID] = current.io_freq; //restart
+
+                wait_queue.push_back(current);
+
+                for (auto &p : job_list) {
+                    if (p.PID == current.PID) {
+                        p.state = WAITING;
+                        break;
+                    }
+                }
+
+                ready_queue.erase(ready_queue.begin() + current_index);
+                current_index = -1;
             }
         } else {
+            // CPU idle
             current_time++;
         }
-    }
         /////////////////////////////////////////////////////////////////
+
+    }
     
     //Close the output table
     execution_status += print_exec_footer();
@@ -138,6 +190,7 @@ int main(int argc, char** argv) {
         std::cout << "To run the program, do: ./interrutps <your_input_file.txt>" << std::endl;
         return -1;
     }
+
 
     //Open the input file
     auto file_name = argv[1];
